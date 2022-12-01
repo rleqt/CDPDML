@@ -26,7 +26,11 @@ def max_numba(A, B):
      np.array
          element-wise maximum between A and B
      """
-    pass
+    newMat = np.zeros((1000, 1000))
+    for i in prange(1000):
+        for j in prange(1000):
+            newMat[i][j] = max(A[i][j], B[i][j])
+    return newMat
 
 
 def max_gpu(A, B):
