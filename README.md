@@ -1,1 +1,1 @@
-# MC_HW1
+# Concurrent and Distributed Programming for Data processing and Machine Learning
