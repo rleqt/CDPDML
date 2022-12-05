@@ -40,20 +40,18 @@ def max_gpu(A, B):
      np.array
          element-wise maximum between A and B
      """
-    C = np.zeros((1000, 1000))
+    c_gpu = np.zeros((1000, 1000))
     a_gpu = cuda.to_device(A)
-    b_gpu = cuda.to_device(A)
-    c_gpu = cuda.to_device(C)
+    b_gpu = cuda.to_device(B)
     max_kernel[1000, 1000](a_gpu, b_gpu, c_gpu)
-    return c_gpu.copy_to_host()
+    return c_gpu
 
 
 @cuda.jit
 def max_kernel(A, B, C):
-    tid = cuda.threadIdx.x
-    bid = cuda.blockIdx.x
-    C[bid][tid] = np.max(A[bid][tid], B[bid][tid])
-    cuda.syncthreads()
+    tx = cuda.threadIdx.x
+    ty = cuda.blockIdx.x
+    C[tx, ty] = max(A[tx, ty], B[tx, ty])
 
 
 # this is the comparison function - keep it as it is.
