@@ -65,7 +65,7 @@ def zeros_weights(sizes):
     # raise NotImplementedError("To be implemented")
 
 
-def zeros_biases(list):
+def zeros_biases(sizes):
     """
          Parameters
          ----------
@@ -77,7 +77,7 @@ def zeros_biases(list):
              list of zero np arrays bias matrices
 
     """
-    return [np.zeros(list[i]) for i in range(len(list))]
+    return [np.zeros(sizes[i]) for i in range(len(sizes))]
     # raise NotImplementedError("To be implemented")
 
 
@@ -111,7 +111,7 @@ def add_elementwise(list1, list2):
          list
              list of sum of each two elements by index
     """
-    return [(list1[i] + list2[i]) for i in range(0, len(list1-1))]
+    return [(list1[i] + list2[i]) for i in range(0, len(list1))]
     # raise NotImplementedError("To be implemented")
 
 
