@@ -1,8 +1,8 @@
 import numpy as np
 from numba import cuda, njit, prange, float32
 import timeit
-import os
-os.environ['NUMBA_ENABLE_CUDASIM'] = '1'
+# import os
+# os.environ['NUMBA_ENABLE_CUDASIM'] = '1'
 
 def max_cpu(A, B):
     """
@@ -40,18 +40,17 @@ def max_gpu(A, B):
      np.array
          element-wise maximum between A and B
      """
-    c_gpu = np.zeros((1000, 1000))
     a_gpu = cuda.to_device(A)
     b_gpu = cuda.to_device(B)
-    max_kernel[1000, 1000](a_gpu, b_gpu, c_gpu)
-    return c_gpu
+    max_kernel[1000, 1000](a_gpu, b_gpu)
+    return a_gpu.copy_to_host()
 
 
 @cuda.jit
-def max_kernel(A, B, C):
+def max_kernel(A, B):
     tx = cuda.threadIdx.x
     ty = cuda.blockIdx.x
-    C[tx, ty] = max(A[tx, ty], B[tx, ty])
+    A[tx, ty] = max(A[tx, ty], B[tx, ty])
 
 
 # this is the comparison function - keep it as it is.
@@ -62,7 +61,7 @@ def max_comparison():
     def timer(f):
         return min(timeit.Timer(lambda: f(A, B)).repeat(3, 20))
 
-    # print('     [*] CPU:', timer(max_cpu))
+    print('     [*] CPU:', timer(max_cpu))
     print('     [*] Numba:', timer(max_numba))
     print('     [*] CUDA:', timer(max_gpu))
 
