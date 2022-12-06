@@ -1,36 +1,36 @@
 import numpy as np
-from numba import njit, cuda
+from numba import njit, cuda, prange
 import timeit
 
-
-def rowMult(X, i, j):
-    sum1 = 0
-    for index in range(X.shape[1]):
-        sum1 = sum1 + X[i][index]*X[j][index]
-    return sum1
-
 def matmul_transpose_trivial(X):
-    outcome = np.zeros_like(X)
-    for i in range(outcome.shape[0]):
-        for j in range(outcome.shape[1]):
-            outcome[i][j] = rowMult(X, i, j)
-
+    row = X.shape[0]
+    col = X.shape[1]
+    outcome = np.zeros((row,row))
+    for i in range(row):
+        for j in range(row):
+            for index in range(col):
+                outcome[i,j] += X[i, index]* X[j, index]
     return outcome
 
-
-@njit
+@njit(parallel=True)
 def matmul_transpose_numba(X):
-    outcome = np.zeros_like(X)
-    for i in range(outcome.shape[0]):
-        for j in range(outcome.shape[1]):
-            for index in range(X.shape[1]):
-                outcome[i][j] = outcome[i][j] + X[i][index]*X[j][index]
-
+    row = X.shape[0]
+    col = X.shape[1]
+    outcome = np.zeros((row,row))
+    for i in prange(row):
+        for j in prange(row):
+            # X_(i,*) * X.t_(*,j) = X_(i,*) * X_(j,*)
+            for index in prange(col):
+                outcome[i,j] += X[i, index]* X[j, index]
     return outcome
 
 
 def matmul_transpose_gpu(X):
-    raise NotImplementedError("To be implemented")
+    row = x.shape[0]
+    x_gpu = cuda.to_device(X)
+    c_gpu = cuda.to_device(np.zeros((row,row)))
+    matmul_kernel[1,1024](x_gpu)
+    return c_gpu.copy_to_host()
 
 
 @cuda.jit
