@@ -65,7 +65,6 @@ def matmul_comparison():
     def timer(f, functionParameters):
         return min(timeit.Timer(lambda: f(X) if functionParameters == 1 else f(X, Xt)).repeat(3, 100))
 
-    print(np.array_equal(matmul_transpose_gpu(X), np.matmul(X, X.T)))
     # print('Python:', timer(matmul_transpose_trivial, 1)) we will not consider this since it takes infinite time :)
     print('Numpy:', timer(np.matmul, 2))
     print('Numba:', timer(matmul_transpose_numba, 1))
