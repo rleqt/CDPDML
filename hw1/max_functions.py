@@ -1,8 +1,6 @@
 import numpy as np
 from numba import cuda, njit, prange, float32
 import timeit
-# import os
-# os.environ['NUMBA_ENABLE_CUDASIM'] = '1'
 
 def max_cpu(A, B):
     """
