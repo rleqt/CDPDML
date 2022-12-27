@@ -44,7 +44,7 @@ def correlation_numba(kernel, image):
     ------
     An numpy array of same shape as image
     '''
-    new_image = np.zeros_like(image)
+    new_image = np.zeros_like(image, dtype=np.float64)
     image_row = image.shape[0]
     image_col = image.shape[1]
     kernel_row = kernel.shape[0]
@@ -53,9 +53,8 @@ def correlation_numba(kernel, image):
         for j in prange(image_col):
             pixels = np.array([image[row,col] if checkRange(image_row, image_col, row,col) else 0 for (row,col) in getNeighbors(kernel_row, kernel_col, i, j)])
             pixels = pixels.reshape(kernel.shape)
-            new_image[i,j] = sum([pixels[row,col] * kernel[row,col] for row in prange(kernel_row) for col in prange(kernel_col)])
+            new_image[i,j] = np.sum(pixels * kernel)
     return new_image
-
 
 def sobel_operator():
     '''Load the image and perform the operator
