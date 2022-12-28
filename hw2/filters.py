@@ -16,19 +16,40 @@ def correlation_gpu(kernel, image):
     ------
     An numpy array of same shape as image
     '''
-    raise NotImplementedError("To be implemented")
+    image_row = image.shape[0]
+    image_col = image.shape[1]
+    kernel_row = kernel.shape[0]
+    kernel_col = kernel.shape[1]
 
-@njit
-def checkRange(image_row, image_col, i,j):
-    return (i>=0 and i < image_row and j >= 0 and j < image_col)
+    # constructing the padded matrix
+    padded = np.zeros((image_row + 2*kernel_row, image_col + 2*kernel_col), dtype=np.float64)
+    padded[kernel_row:(kernel_row+image_row),kernel_col:(kernel_col+image_col)] = image
+    padded_gpu = cuda.to_device(padded)
+    kernel_gpu = cuda.to_device(kernel)
 
-@njit
-def getNeighbors(kernel_row, kernel_col , i , j):
-    middle_row = int((kernel_row-1)/2)
-    middle_col = int((kernel_col-1)/2)
-    return [(i+row_offset,j+col_offset) 
-            for row_offset in prange(-1* middle_row, middle_row + 1)
-            for col_offset in prange(-1* middle_col, middle_col + 1)]
+    new_image = np.zeros_like(image, dtype=np.float64)
+    new_image_gpu = cuda.to_device(new_image)
+    
+    update_pixel_kernel[image_row, image_col](padded_gpu, kernel_gpu, new_image_gpu)
+    return new_image_gpu.copy_to_host()
+
+@cuda.jit
+def update_pixel_kernel(padded, kernel, new_image):
+    i = cuda.blockIdx.x
+    j = cuda.threadIdx.x
+    kernel_row = kernel.shape[0]
+    kernel_col = kernel.shape[1]
+
+    # extracting a piece of the matrix with (i,j) in the middle of it
+    middle_row, middle_col = int((-1)/2), int((kernel_col-1)/2)
+    pixels = padded[(i-middle_row):(i+middle_row + 1), (j-middle_col):(j+middle_col + 1)] 
+    
+    # applying the kernel
+    sum = 0
+    for i in range(kernel_row):
+        for j in range(kernel_col):
+            sum += pixels[i,j] * kernel[i,j] 
+    new_image[i-kernel_row,j-kernel_col] = sum
 
 @njit
 def correlation_numba(kernel, image):
@@ -49,12 +70,15 @@ def correlation_numba(kernel, image):
     image_col = image.shape[1]
     kernel_row = kernel.shape[0]
     kernel_col = kernel.shape[1]
+    # constructing the padded matrix
     padded = np.zeros((image_row + 2*kernel_row, image_col + 2*kernel_col), dtype=np.float64)
     padded[kernel_row:(kernel_row+image_row),kernel_col:(kernel_col+image_col)] = image
     for i in prange(kernel_row, image_row+kernel_row):
         for j in prange(kernel_col, image_col+kernel_col):
+            # extracting a piece of the matrix with (i,j) in the middle of it
             middle_row, middle_col = int((kernel_row-1)/2), int((kernel_col-1)/2)
-            pixels = padded[i-middle_row:i+middle_row + 1, j-middle_col:j+middle_col + 1] 
+            pixels = padded[(i-middle_row):(i+middle_row + 1), (j-middle_col):(j+middle_col + 1)] 
+            # applying the kernel
             new_image[i-kernel_row,j-kernel_col] = np.sum(pixels * kernel)
     return new_image
 
