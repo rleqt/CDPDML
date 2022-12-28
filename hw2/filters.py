@@ -49,11 +49,13 @@ def correlation_numba(kernel, image):
     image_col = image.shape[1]
     kernel_row = kernel.shape[0]
     kernel_col = kernel.shape[1]
-    for i in prange(image_row):
-        for j in prange(image_col):
-            pixels = np.array([image[row,col] if checkRange(image_row, image_col, row,col) else 0 for (row,col) in getNeighbors(kernel_row, kernel_col, i, j)])
-            pixels = pixels.reshape(kernel.shape)
-            new_image[i,j] = np.sum(pixels * kernel)
+    padded = np.zeros((image_row + 2*kernel_row, image_col + 2*kernel_col), dtype=np.float64)
+    padded[kernel_row:(kernel_row+image_row),kernel_col:(kernel_col+image_col)] = image
+    for i in prange(kernel_row, image_row+kernel_row):
+        for j in prange(kernel_col, image_col+kernel_col):
+            middle_row, middle_col = int((kernel_row-1)/2), int((kernel_col-1)/2)
+            pixels = padded[i-middle_row:i+middle_row + 1, j-middle_col:j+middle_col + 1] 
+            new_image[i-kernel_row,j-kernel_col] = np.sum(pixels * kernel)
     return new_image
 
 def sobel_operator():
@@ -68,7 +70,8 @@ def sobel_operator():
     sobel_filter2 = np.array([[3, 0, -3],[10, 0, -10],[3, 0, -3]])
     sobel_filter3 = np.array([[1, 0, -1],[2, 0, -2],[1, 0, -1],[2, 0, -2],[1, 0, -1]])
     sobel_filter4 = np.array([[1,0,0,0,-1],[2,0,0,0,-2],[1,0,0,0,-1],[2,0,0,0,-2],[1,0,0,0,-1]])
-    chosen_filter = sobel_filter1
+    correlation =   np.array([[1, 1, 1],[1, 0, 1],[1, 1, 1]])
+    chosen_filter = sobel_filter4
     G_x = correlation_numba(chosen_filter, pic)
     G_y = correlation_numba(chosen_filter.T, pic)
     return np.sqrt((G_x ** 2) + (G_y ** 2))
