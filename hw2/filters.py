@@ -64,9 +64,14 @@ def sobel_operator():
         An numpy array of the image
         '''
     pic = load_image()
-    # your calculations
-
-    raise NotImplementedError("To be implemented")
+    sobel_filter1 = np.array([[1, 0, -1],[2, 0, -2],[1, 0, -1]])
+    sobel_filter2 = np.array([[3, 0, -3],[10, 0, -10],[3, 0, -3]])
+    sobel_filter3 = np.array([[1, 0, -1],[2, 0, -2],[1, 0, -1],[2, 0, -2],[1, 0, -1]])
+    sobel_filter4 = np.array([[1,0,0,0,-1],[2,0,0,0,-2],[1,0,0,0,-1],[2,0,0,0,-2],[1,0,0,0,-1]])
+    chosen_filter = sobel_filter1
+    G_x = correlation_numba(chosen_filter, pic)
+    G_y = correlation_numba(chosen_filter.T, pic)
+    return np.sqrt((G_x ** 2) + (G_y ** 2))
 
 
 def load_image(): 
