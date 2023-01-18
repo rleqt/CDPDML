@@ -75,11 +75,23 @@ def corr_comparison():
     print('CUDA 3X3 kernel:', timer(shapen_kernel, correlation_gpu))
     print("---------------------------------------------")
     
+    # a = correlation_cpu(blur_kernel, image)
+    # b = correlation_gpu(blur_kernel, image)
+    # print(np.array_equal(a,b))
+    # indices = np.where(np.not_equal(a, b))
+    # # Extract the different elements
+    # different_elements = a[indices]
+    # # Print the different elements
+    # print(different_elements)
+    # print(indices)
+
+    # print(np.array_equal(correlation_cpu(blur_kernel, image),correlation_gpu(blur_kernel, image)))
     print('CPU 5X5 kernel:', timer(blur_kernel, correlation_cpu))
     print('Numba 5X5 kernel:', timer(blur_kernel, correlation_numba))
     print('CUDA 5X5 kernel:', timer(blur_kernel, correlation_gpu))
     print("---------------------------------------------")
     
+    # print(np.array_equal(correlation_cpu(flipped_edge_kernel, image),correlation_gpu(edge_kernel, image)))
     print('CPU 7X7 kernel:', timer(flipped_edge_kernel, correlation_cpu))
     print('Numba 7X7 kernel:', timer(edge_kernel, correlation_numba))
     print('CUDA 7X7 kernel:', timer(edge_kernel, correlation_gpu))
@@ -92,4 +104,6 @@ if __name__ == '__main__':
     corr_comparison()
 
     res = sobel_operator()
-    show_image(res)
+    # show_image(res)
+    plt.imshow(res, cmap='gray')
+    plt.savefig('filter4.png')
