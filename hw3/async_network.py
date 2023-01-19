@@ -46,6 +46,12 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
         """
         # setting up the number of batches the worker should do every epoch
         # TODO: add your code
+        batches_to_serve = self.num_workers // self.number_of_batches
+        batches_left = self.num_workers % self.number_of_batches
+        worker_rank = self.rank - self.num_masters # relative index among the workers
+        if worker_rank < batches_left: # the first workers should do the remainder
+            batches_to_serve += 1
+        self.number_of_batches = batches_to_serve
 
         for epoch in range(self.epochs):
             # creating batches for epoch
@@ -56,26 +62,39 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                 # do work - don't change this
                 self.forward_prop(x)
                 nabla_b, nabla_w = self.back_prop(y)
-                with open("shakom.txt", "a") as file:
-                    file.write("backprop ")
                 # send nabla_b, nabla_w to masters 
                 # TODO: add your code
-                requests = []
-                for i in range(self.num_masters):
-                    requests += [self.comm.isend(buf=self.rank, dest=i, tag=0)] # an "i'm waiting" message
-                    requests += [self.comm.isend(nabla_b[nabla_b % self.num_masters == i], dest=i, tag=1)] #tag is 1 for updating b
-                    requests += [self.comm.isend(nabla_w[nabla_w % self.num_masters == i], dest=i, tag=2)] #tag is 2 for updating w
-                    with open("shakom.txt", "a") as file:
-                        file.write("sending to " +  str(i))
-                MPI.Request.waitall(requests) # waiting for all requests to send
 
+                with open("shakom.txt", "a") as file:
+                    file.write(str(self.rank - self.num_masters) + ": nabla_b:")
+                    for i in nabla_b:
+                        file.write(str(i) + ", ")
+                    file.write(str(self.rank - self.num_masters) + ": nabla_w:")
+                    for i in nabla_w:
+                        file.write(str(i) + ", ")
+                    file.write("\n\n\n\n")
+
+                requests = []
+                # indices = np.arange(self.num_layers)
+                for i in range(self.num_masters):
+                    for layer in range(i, self.num_layers, self.num_masters):
+                        requests += [self.comm.Isend(nabla_b[layer], dest=i, tag=layer)]
+                        requests += [self.comm.Isend(nabla_w[layer], dest=i, tag=layer)]
+                    # requests += [self.comm.Isend(nabla_b[indices % self.num_masters == i], dest=i, tag=1)] #tag is 1 for updating b
+                    # requests += [self.comm.Isend(nabla_w[indices % self.num_masters == i], dest=i, tag=2)] #tag is 2 for updating w
+                with open("out.out", "a") as file:
+                    file.write("sent")
                 # recieve new self.weight and self.biases values from masters
                 # TODO: add your code
                 responses = []
-                for i in range(self.num_masters):
-                    responses += [self.comm.Irecv(self.biases[self.biases % self.num_masters == i], i, 3)]
-                    responses += [self.comm.Irecv(self.weights[self.weights % self.num_masters == i], i, 4)]
-                MPI.Request.waitall(responses)
+                # indices = np.arange(self.biases.shape)
+                # for i in range(self.num_masters):
+                #     # updating biases and weights according to master with rank i
+                #     responses += [self.comm.Irecv(self.biases[indices % self.num_masters == i], i, 3)]
+                #     responses += [self.comm.Irecv(self.weights[indices % self.num_masters == i], i, 4)]
+                MPI.Request.Waitall(requests)  # waiting for all requests to send
+                MPI.Request.Waitall(responses) # waiting for all responses to send
+
 
     def do_master(self, validation_data):
         """
@@ -94,16 +113,21 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                 # wait for any worker to finish batch and
                 # get the nabla_w, nabla_b for the master's layers
                 # TODO: add your code
+
                 stat = MPI.Status()
-                while not self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=0, status=stat):
+                # "busy waiting" until a worker waits to be served
+                while not self.comm.Iprobe(status = stat):
                     pass
-                with open("shakom.txt", "w") as file:
-                    file.write("serving ", stat.Get_source())
-                responses = []
-                responses += [self.comm.Irecv(buf=nabla_b[batch], source=stat.Get_source(), tag=1)]
-                responses += [self.comm.Irecv(buf=nabla_w[batch], source=stat.Get_source(), tag=2)]
-                MPI.Request.waitall(responses) # waiting for all requests
                 
+                responses = []
+                curr_worker = stat.Get_source()
+                curr = 0
+                for layer in range(self.rank, self.num_layers, self.num_masters):
+                    responses += [self.comm.Irecv(nabla_b[curr], source=curr_worker, tag=layer)]
+                    responses += [self.comm.Irecv(nabla_w[curr], source=curr_worker, tag=layer)]
+                    curr += 1
+                MPI.Request.Waitall(responses) # waiting for all requests
+
                 # calculate new weights and biases (of layers in charge)
                 for i, dw, db in zip(range(self.rank, self.num_layers, self.num_masters), nabla_w, nabla_b):
                     self.weights[i] = self.weights[i] - self.eta * dw
@@ -111,6 +135,11 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
 
                 # send new values (of layers in charge)
                 # TODO: add your code
+                for layer in range(self.rank, self.num_layers, self.num_masters):
+                    responses += [self.comm.Irecv(nabla_b[curr], source=curr_worker, tag=layer)]
+                    responses += [self.comm.Irecv(nabla_w[curr], source=curr_worker, tag=layer)]
+                    curr += 1
+                MPI.Request.Waitall(responses) # waiting for all requests
 
             self.print_progress(validation_data, epoch)
 
