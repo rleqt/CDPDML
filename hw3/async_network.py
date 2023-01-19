@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import math
 import mpi4py
-from time import time
+from time import time_ns
 
 mpi4py.rc(initialize=False, finalize=False)
 from mpi4py import MPI
@@ -25,7 +25,7 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
-		self.num_workers = self.size - self.num_masters
+        self.num_workers = self.size - self.num_masters
 
         self.layers_per_master = self.num_layers // self.num_masters
 
@@ -56,12 +56,26 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                 # do work - don't change this
                 self.forward_prop(x)
                 nabla_b, nabla_w = self.back_prop(y)
-
+                with open("shakom.txt", "a") as file:
+                    file.write("backprop ")
                 # send nabla_b, nabla_w to masters 
                 # TODO: add your code
+                requests = []
+                for i in range(self.num_masters):
+                    requests += [self.comm.isend(buf=self.rank, dest=i, tag=0)] # an "i'm waiting" message
+                    requests += [self.comm.isend(nabla_b[nabla_b % self.num_masters == i], dest=i, tag=1)] #tag is 1 for updating b
+                    requests += [self.comm.isend(nabla_w[nabla_w % self.num_masters == i], dest=i, tag=2)] #tag is 2 for updating w
+                    with open("shakom.txt", "a") as file:
+                        file.write("sending to " +  str(i))
+                MPI.Request.waitall(requests) # waiting for all requests to send
 
                 # recieve new self.weight and self.biases values from masters
                 # TODO: add your code
+                responses = []
+                for i in range(self.num_masters):
+                    responses += [self.comm.Irecv(self.biases[self.biases % self.num_masters == i], i, 3)]
+                    responses += [self.comm.Irecv(self.weights[self.weights % self.num_masters == i], i, 4)]
+                MPI.Request.waitall(responses)
 
     def do_master(self, validation_data):
         """
@@ -77,11 +91,19 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
 
         for epoch in range(self.epochs):
             for batch in range(self.number_of_batches):
-
                 # wait for any worker to finish batch and
                 # get the nabla_w, nabla_b for the master's layers
                 # TODO: add your code
-
+                stat = MPI.Status()
+                while not self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=0, status=stat):
+                    pass
+                with open("shakom.txt", "w") as file:
+                    file.write("serving ", stat.Get_source())
+                responses = []
+                responses += [self.comm.Irecv(buf=nabla_b[batch], source=stat.Get_source(), tag=1)]
+                responses += [self.comm.Irecv(buf=nabla_w[batch], source=stat.Get_source(), tag=2)]
+                MPI.Request.waitall(responses) # waiting for all requests
+                
                 # calculate new weights and biases (of layers in charge)
                 for i, dw, db in zip(range(self.rank, self.num_layers, self.num_masters), nabla_w, nabla_b):
                     self.weights[i] = self.weights[i] - self.eta * dw
