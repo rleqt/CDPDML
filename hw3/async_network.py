@@ -45,7 +45,6 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
         :param training_data: a tuple of data and labels to train the NN with
         """
         # setting up the number of batches the worker should do every epoch
-        # TODO: add your code
         batches_to_serve = self.number_of_batches // self.num_workers
         batches_left = self.number_of_batches % self.num_workers
         worker_rank = self.rank - self.num_masters # relative index among the workers
@@ -53,12 +52,11 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
             batches_to_serve += 1
         self.number_of_batches = batches_to_serve
 
-        with open(str(self.rank) + ".log", "a") as file:
-            file.write("about to train on " + str(self.number_of_batches) + " batches \n")
         for epoch in range(self.epochs):
             # creating batches for epoch
             data = training_data[0]
             labels = training_data[1]
+            # creating batches (considering the batches number we've figured earlier)
             mini_batches = self.create_batches(data, labels, self.mini_batch_size)
             for x, y in mini_batches:
                 # do work - don't change this
@@ -72,16 +70,11 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                         # send nabla_b, nabla_w to masters 
                         requests += [self.comm.Isend(nabla_b[layer], dest=i, tag=layer)]
                         requests += [self.comm.Isend(nabla_w[layer], dest=i, tag=layer + self.num_layers)]
-                        with open(str(self.rank) + ".log", "a") as file:
-                            file.write("sending to master\n")
+
                         # recieve new self.weight and self.biases values from masters
                         requests += [self.comm.Irecv(self.biases[layer], source=i, tag=layer)]
                         requests += [self.comm.Irecv(self.weights[layer], source=i, tag=layer + self.num_layers)]
                 MPI.Request.Waitall(requests)  # waiting for all requests to complete
-                with open(str(self.rank) + ".log", "a") as file:
-                    file.write("got information\n")
-        with open(str(self.rank) + ".log", "a") as file:
-            file.write("im done here...\n")
 
 
     def do_master(self, validation_data):
@@ -99,9 +92,7 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
         for epoch in range(self.epochs):
             for batch in range(self.number_of_batches):
                 # wait for any worker to finish batch and
-                # get the nabla_w, nabla_b for the master's layers
-                with open(str(self.rank) + ".log", "a") as file:
-                    file.write("waiting for worker\n")
+                
                 stat = MPI.Status()
                 # "busy waiting" until a worker waits to be served
                 while not self.comm.Iprobe(status = stat):
@@ -109,13 +100,11 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                 
                 requests = []
                 curr_worker = stat.Get_source()
+                # get the nabla_w, nabla_b for the master's layers (one layer at a time)
                 for curr, layer in enumerate(range(self.rank, self.num_layers, self.num_masters)):
                     requests += [self.comm.Irecv(nabla_b[curr], source=curr_worker, tag=layer)]
                     requests += [self.comm.Irecv(nabla_w[curr], source=curr_worker, tag=layer + self.num_layers)]
                 MPI.Request.Waitall(requests) # waiting for all requests
-                with open(str(self.rank) + ".log", "a") as file:
-                    file.write("got info from worker " + str(curr_worker) + "\n")
-                    file.write("calculating...\n")
 
                 # calculate new weights and biases (of layers in charge)
                 for i, dw, db in zip(range(self.rank, self.num_layers, self.num_masters), nabla_w, nabla_b):
@@ -123,20 +112,30 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                     self.biases[i] = self.biases[i] - self.eta * db
 
                 # send new values (of layers in charge)
-                with open(str(self.rank) + ".log", "a") as file:
-                    file.write("sending updated info for worker " + str(curr_worker) + "\n")
                 responses = []
                 for layer in range(self.rank, self.num_layers, self.num_masters):
                     responses += [self.comm.Isend(self.biases[layer], dest=curr_worker, tag=layer)]
                     responses += [self.comm.Isend(self.weights[layer], dest=curr_worker, tag=layer + self.num_layers)]
-                MPI.Request.Waitall(responses) # waiting for all requests
+                MPI.Request.Waitall(responses) # waiting for all requests before serving another worker
 
             self.print_progress(validation_data, epoch)
 
-        # gather relevant weight and biases to process 0
-        # TODO: add your code
-        with open(str(self.rank) + ".log", "a") as file:
-            file.write("sending final info to process 0...\n")
-        for layer in range(self.rank, self.num_layers, self.num_masters):
-            responses += [self.comm.Isend(self.biases[layer], dest=0, tag=layer)]
-            responses += [self.comm.Isend(self.weights[layer], dest=0, tag=layer + self.num_layers)] 
+            # gather relevant weight and biases to process 0
+            if self.rank == 0:
+                # we want to gather only layers from other masters
+                layers_to_gather = [layer for layer in range(0, self.num_layers) if layer not in range(self.rank, self.num_layers, self.num_masters)]
+                
+                # sending requests to get all the layers...
+                responses = []
+                for layer in layers_to_gather:
+                    responses += [self.comm.Irecv(self.biases[layer], source=MPI.ANY_SOURCE, tag=layer + 2 * self.num_layers)]
+                    responses += [self.comm.Irecv(self.weights[layer], source=MPI.ANY_SOURCE, tag=layer + 3 * self.num_layers)]
+                MPI.Request.Waitall(responses)
+                
+            else:
+                # sending the current master's layers to process 0
+                responses = []
+                for layer in range(self.rank, self.num_layers, self.num_masters):
+                    responses += [self.comm.Isend(self.biases[layer], dest=0, tag=layer + 2 * self.num_layers)]
+                    responses += [self.comm.Isend(self.weights[layer], dest=0, tag=layer + 3 * self.num_layers)]
+                MPI.Request.Waitall(responses)
