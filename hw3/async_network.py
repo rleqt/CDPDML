@@ -120,22 +120,22 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
 
             self.print_progress(validation_data, epoch)
 
-            # gather relevant weight and biases to process 0
-            if self.rank == 0:
-                # we want to gather only layers from other masters
-                layers_to_gather = [layer for layer in range(0, self.num_layers) if layer not in range(self.rank, self.num_layers, self.num_masters)]
-                
-                # sending requests to get all the layers...
-                responses = []
-                for layer in layers_to_gather:
-                    responses += [self.comm.Irecv(self.biases[layer], source=MPI.ANY_SOURCE, tag=layer + 2 * self.num_layers)]
-                    responses += [self.comm.Irecv(self.weights[layer], source=MPI.ANY_SOURCE, tag=layer + 3 * self.num_layers)]
-                MPI.Request.Waitall(responses)
-                
-            else:
-                # sending the current master's layers to process 0
-                responses = []
-                for layer in range(self.rank, self.num_layers, self.num_masters):
-                    responses += [self.comm.Isend(self.biases[layer], dest=0, tag=layer + 2 * self.num_layers)]
-                    responses += [self.comm.Isend(self.weights[layer], dest=0, tag=layer + 3 * self.num_layers)]
-                MPI.Request.Waitall(responses)
+        # gather relevant weight and biases to process 0
+        if self.rank == 0:
+            # we want to gather only layers from other masters
+            layers_to_gather = [layer for layer in range(0, self.num_layers) if layer not in range(self.rank, self.num_layers, self.num_masters)]
+            
+            # sending requests to get all the layers...
+            responses = []
+            for layer in layers_to_gather:
+                responses += [self.comm.Irecv(self.biases[layer], source=MPI.ANY_SOURCE, tag=layer + 2 * self.num_layers)]
+                responses += [self.comm.Irecv(self.weights[layer], source=MPI.ANY_SOURCE, tag=layer + 3 * self.num_layers)]
+            MPI.Request.Waitall(responses)
+            
+        else:
+            # sending the current master's layers to process 0
+            responses = []
+            for layer in range(self.rank, self.num_layers, self.num_masters):
+                responses += [self.comm.Isend(self.biases[layer], dest=0, tag=layer + 2 * self.num_layers)]
+                responses += [self.comm.Isend(self.weights[layer], dest=0, tag=layer + 3 * self.num_layers)]
+            MPI.Request.Waitall(responses)
