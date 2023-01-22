@@ -29,7 +29,14 @@ class SynchronicNeuralNetwork(NeuralNetwork):
                 # summing all ma_nabla_b and ma_nabla_w to nabla_w and nabla_b
                 nabla_w = []
                 nabla_b = []
-                # TODO: add your code
+                for w in ma_nabla_w:
+                    w_sum = np.zeros_like(w)
+                    comm.Allreduce(w, w_sum, MPI.SUM)
+                    nabla_w.append(w_sum)
+                for b in ma_nabla_b:
+                    b_sum = np.zeros_like(b)
+                    comm.Allreduce(b, b_sum, MPI.SUM)
+                    nabla_b.append(b_sum)
 
                 # calculate work
                 self.weights = [w - self.eta * dw for w, dw in zip(self.weights, nabla_w)]

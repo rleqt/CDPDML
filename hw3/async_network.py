@@ -68,8 +68,8 @@ class AsynchronicNeuralNetwork(NeuralNetwork):
                 for i in range(self.num_masters):
                     for layer in range(i, self.num_layers, self.num_masters):
                         # send nabla_b, nabla_w to masters 
-                        requests += [self.comm.Isend(nabla_b[layer], dest=i, tag=layer)]
-                        requests += [self.comm.Isend(nabla_w[layer], dest=i, tag=layer + self.num_layers)]
+                        self.comm.Isend(nabla_b[layer], dest=i, tag=layer)
+                        self.comm.Isend(nabla_w[layer], dest=i, tag=layer + self.num_layers)
 
                         # recieve new self.weight and self.biases values from masters
                         requests += [self.comm.Irecv(self.biases[layer], source=i, tag=layer)]
